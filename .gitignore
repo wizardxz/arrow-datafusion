@@ -101,3 +101,7 @@ arrow-ballista
 
 datafusion/CHANGELOG.md.bak
 .githubchangeloggenerator.cache*
+
+# antlr
+.antlr
+*.jar

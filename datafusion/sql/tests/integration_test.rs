@@ -21,16 +21,17 @@ use std::sync::Arc;
 use std::vec;
 
 use arrow_schema::*;
+use datafusion_common::parsers::CompressionTypeVariant;
 use sqlparser::dialect::{Dialect, GenericDialect, HiveDialect, MySqlDialect};
 
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::TableReference;
 use datafusion_common::{assert_contains, ScalarValue};
 use datafusion_common::{DataFusionError, Result};
+use datafusion_common::{OwnedTableReference, TableReference};
 use datafusion_expr::logical_plan::LogicalPlan;
 use datafusion_expr::logical_plan::Prepare;
-use datafusion_expr::TableSource;
 use datafusion_expr::{AggregateUDF, ScalarUDF};
+use datafusion_expr::{CreateExternalTable, TableSource};
 use datafusion_sql::parser::DFParser;
 use datafusion_sql::planner::{ContextProvider, ParserOptions, SqlToRel};
 
@@ -1572,8 +1573,36 @@ fn select_7480_2() {
 #[test]
 fn create_external_table_csv() {
     let sql = "CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV LOCATION 'foo.csv'";
-    let expected = "CreateExternalTable: Bare { table: \"t\" }";
-    quick_test(sql, expected);
+    if let LogicalPlan::CreateExternalTable(CreateExternalTable {
+        schema,
+        name: OwnedTableReference::Bare { table },
+        location,
+        file_type,
+        has_header,
+        delimiter,
+        table_partition_cols,
+        if_not_exists,
+        definition: _,
+        file_compression_type,
+        options,
+    }) = logical_plan(sql).unwrap()
+    {
+        assert_eq!(
+            r#"DFSchema { fields: [DFField { qualifier: None, field: Field { name: "c1", data_type: Int32, nullable: false, dict_id: 0, dict_is_ordered: false, metadata: {} } }], metadata: {} }"#,
+            format!("{schema:?}")
+        );
+        assert_eq!(String::from("t"), table);
+        assert_eq!(String::from("foo.csv"), location);
+        assert_eq!(String::from("CSV"), file_type);
+        assert_eq!(false, has_header);
+        assert_eq!(',', delimiter);
+        assert_eq!(Vec::<String>::new(), table_partition_cols);
+        assert_eq!(false, if_not_exists);
+        assert_eq!(CompressionTypeVariant::UNCOMPRESSED, file_compression_type);
+        assert_eq!(HashMap::<String, String>::new(), options);
+    } else {
+        panic!()
+    }
 }
 
 #[test]
@@ -1600,29 +1629,113 @@ fn create_schema_with_unquoted_normalized_name() {
 #[test]
 fn create_external_table_custom() {
     let sql = "CREATE EXTERNAL TABLE dt STORED AS DELTATABLE LOCATION 's3://bucket/schema/table';";
-    let expected = r#"CreateExternalTable: Bare { table: "dt" }"#;
-    quick_test(sql, expected);
+    if let LogicalPlan::CreateExternalTable(CreateExternalTable {
+        schema,
+        name: OwnedTableReference::Bare { table },
+        location,
+        file_type,
+        has_header,
+        delimiter,
+        table_partition_cols,
+        if_not_exists,
+        definition: _,
+        file_compression_type,
+        options,
+    }) = logical_plan(sql).unwrap()
+    {
+        assert_eq!(
+            r#"DFSchema { fields: [], metadata: {} }"#,
+            format!("{schema:?}")
+        );
+        assert_eq!(String::from("dt"), table);
+        assert_eq!(String::from("s3://bucket/schema/table"), location);
+        assert_eq!(String::from("DELTATABLE"), file_type);
+        assert_eq!(false, has_header);
+        assert_eq!(',', delimiter);
+        assert_eq!(Vec::<String>::new(), table_partition_cols);
+        assert_eq!(false, if_not_exists);
+        assert_eq!(CompressionTypeVariant::UNCOMPRESSED, file_compression_type);
+        assert_eq!(HashMap::<String, String>::new(), options);
+    } else {
+        panic!()
+    }
 }
 
 #[test]
 fn create_external_table_csv_no_schema() {
     let sql = "CREATE EXTERNAL TABLE t STORED AS CSV LOCATION 'foo.csv'";
-    let expected = "CreateExternalTable: Bare { table: \"t\" }";
-    quick_test(sql, expected);
+    if let LogicalPlan::CreateExternalTable(CreateExternalTable {
+        schema,
+        name: OwnedTableReference::Bare { table },
+        location,
+        file_type,
+        has_header,
+        delimiter,
+        table_partition_cols,
+        if_not_exists,
+        definition: _,
+        file_compression_type,
+        options,
+    }) = logical_plan(sql).unwrap()
+    {
+        assert_eq!(
+            r#"DFSchema { fields: [], metadata: {} }"#,
+            format!("{schema:?}")
+        );
+        assert_eq!(String::from("t"), table);
+        assert_eq!(String::from("foo.csv"), location);
+        assert_eq!(String::from("CSV"), file_type);
+        assert_eq!(false, has_header);
+        assert_eq!(',', delimiter);
+        assert_eq!(Vec::<String>::new(), table_partition_cols);
+        assert_eq!(false, if_not_exists);
+        assert_eq!(CompressionTypeVariant::UNCOMPRESSED, file_compression_type);
+        assert_eq!(HashMap::<String, String>::new(), options);
+    } else {
+        panic!()
+    }
 }
 
 #[test]
 fn create_external_table_with_compression_type() {
     // positive case
     let sqls = vec![
-            "CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV COMPRESSION TYPE GZIP LOCATION 'foo.csv.gz'",
-            "CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV COMPRESSION TYPE BZIP2 LOCATION 'foo.csv.bz2'",
-            "CREATE EXTERNAL TABLE t(c1 int) STORED AS JSON COMPRESSION TYPE GZIP LOCATION 'foo.json.gz'",
-            "CREATE EXTERNAL TABLE t(c1 int) STORED AS JSON COMPRESSION TYPE BZIP2 LOCATION 'foo.json.bz2'",
+            ("CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV COMPRESSION TYPE GZIP LOCATION 'foo.csv.gz'", "CSV", CompressionTypeVariant::GZIP, "foo.csv.gz"),
+            ("CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV COMPRESSION TYPE BZIP2 LOCATION 'foo.csv.bz2'", "CSV", CompressionTypeVariant::BZIP2, "foo.csv.bz2"),
+            ("CREATE EXTERNAL TABLE t(c1 int) STORED AS JSON COMPRESSION TYPE GZIP LOCATION 'foo.json.gz'", "JSON", CompressionTypeVariant::GZIP, "foo.json.gz"),
+            ("CREATE EXTERNAL TABLE t(c1 int) STORED AS JSON COMPRESSION TYPE BZIP2 LOCATION 'foo.json.bz2'", "JSON", CompressionTypeVariant::BZIP2, "foo.json.bz2"),
         ];
-    for sql in sqls {
-        let expected = "CreateExternalTable: Bare { table: \"t\" }";
-        quick_test(sql, expected);
+    for (sql, expected_file_type, expected_compression, expected_location) in sqls {
+        if let LogicalPlan::CreateExternalTable(CreateExternalTable {
+            schema,
+            name: OwnedTableReference::Bare { table },
+            location,
+            file_type,
+            has_header,
+            delimiter,
+            table_partition_cols,
+            if_not_exists,
+            definition: _,
+            file_compression_type,
+            options,
+        }) = logical_plan(sql).unwrap()
+        {
+            assert_eq!(
+                r#"DFSchema { fields: [DFField { qualifier: None, field: Field { name: "c1", data_type: Int32, nullable: false, dict_id: 0, dict_is_ordered: false, metadata: {} } }], metadata: {} }"#,
+                format!("{schema:?}")
+            );
+            assert_eq!(String::from("t"), table);
+            assert_eq!(expected_location, location);
+            assert_eq!(expected_file_type, file_type);
+            assert_eq!(false, has_header);
+            assert_eq!(',', delimiter);
+            assert_eq!(Vec::<String>::new(), table_partition_cols);
+            assert_eq!(false, if_not_exists);
+            assert_eq!(expected_compression, file_compression_type);
+            assert_eq!(HashMap::<String, String>::new(), options);
+        } else {
+            panic!()
+        }
     }
 
     // negative case
@@ -1654,8 +1767,36 @@ fn create_external_table_parquet() {
 #[test]
 fn create_external_table_parquet_no_schema() {
     let sql = "CREATE EXTERNAL TABLE t STORED AS PARQUET LOCATION 'foo.parquet'";
-    let expected = "CreateExternalTable: Bare { table: \"t\" }";
-    quick_test(sql, expected);
+    if let LogicalPlan::CreateExternalTable(CreateExternalTable {
+        schema,
+        name: OwnedTableReference::Bare { table },
+        location,
+        file_type,
+        has_header,
+        delimiter,
+        table_partition_cols,
+        if_not_exists,
+        definition: _,
+        file_compression_type,
+        options,
+    }) = logical_plan(sql).unwrap()
+    {
+        assert_eq!(
+            r#"DFSchema { fields: [], metadata: {} }"#,
+            format!("{schema:?}")
+        );
+        assert_eq!(String::from("t"), table);
+        assert_eq!(String::from("foo.parquet"), location);
+        assert_eq!(String::from("PARQUET"), file_type);
+        assert_eq!(false, has_header);
+        assert_eq!(',', delimiter);
+        assert_eq!(Vec::<String>::new(), table_partition_cols);
+        assert_eq!(false, if_not_exists);
+        assert_eq!(CompressionTypeVariant::UNCOMPRESSED, file_compression_type);
+        assert_eq!(HashMap::<String, String>::new(), options);
+    } else {
+        panic!()
+    }
 }
 
 #[test]
@@ -2337,6 +2478,7 @@ fn select_typed_date_string() {
     let sql = "SELECT date '2020-12-10' AS date";
     let expected = "Projection: CAST(Utf8(\"2020-12-10\") AS Date32) AS date\
             \n  EmptyRelation";
+
     quick_test(sql, expected);
 }
 

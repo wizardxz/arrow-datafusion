@@ -69,6 +69,8 @@ pub enum DataFusionError {
     // DataFusions has internal invariants that we are unable to ask the compiler to check for us.
     // This error is raised when one of those invariants is not verified during execution.
     Internal(String),
+    /// This error happens whenever a sql syntax is not valid.
+    Parser(Parser2Error),
     /// This error happens whenever a plan is not valid. Examples include
     /// impossible casts.
     Plan(String),
@@ -92,6 +94,10 @@ pub enum DataFusionError {
     /// Errors originating from either mapping LogicalPlans to/from Substrait plans
     /// or serializing/deserializing protobytes to Substrait plans
     Substrait(String),
+    /// Error in BindingContext
+    BindingContextInternal(Option<String>),
+    /// Error in bind
+    Bind(BinderError),
 }
 
 #[macro_export]
@@ -114,6 +120,32 @@ macro_rules! plan_err {
             line!()
         )))
     };
+}
+
+#[derive(Debug, Clone)]
+pub struct Parser2Error {
+    pub row: isize,
+    pub col: isize,
+    pub message: String,
+}
+
+impl Display for Parser2Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}:{} {}", self.row, self.col, self.message)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BinderError {
+    pub row: isize,
+    pub col: isize,
+    pub message: String,
+}
+
+impl Display for BinderError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}:{} {}", self.row, self.col, self.message)
+    }
 }
 
 /// Schema-related errors
@@ -329,6 +361,16 @@ impl Display for DataFusionError {
             DataFusionError::Substrait(ref desc) => {
                 write!(f, "Substrait error: {desc}")
             }
+            DataFusionError::Parser(ref desc) => {
+                write!(f, "ANTLR Parser error: {desc}")
+            }
+            DataFusionError::BindingContextInternal(ref desc) => {
+                let desc = desc.clone().unwrap_or(String::from("None"));
+                write!(f, "BindingContext internal error: {desc}")
+            }
+            DataFusionError::Bind(ref desc) => {
+                write!(f, "Bind error: {desc}")
+            }
         }
     }
 }
@@ -356,6 +398,9 @@ impl Error for DataFusionError {
             DataFusionError::JITError(e) => Some(e),
             DataFusionError::Context(_, e) => Some(e.as_ref()),
             DataFusionError::Substrait(_) => None,
+            DataFusionError::Parser(_) => None,
+            DataFusionError::BindingContextInternal(_) => None,
+            DataFusionError::Bind(_) => None,
         }
     }
 }

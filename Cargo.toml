@@ -28,6 +28,7 @@ members = [
     "datafusion/row",
     "datafusion/sql",
     "datafusion/substrait",
+    "datafusion/binder_macro",
     "datafusion-examples",
     "test-utils",
     "parquet-test-utils",

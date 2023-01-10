@@ -29,5 +29,21 @@ mod statement;
 pub mod utils;
 mod values;
 
+mod antlr {
+    pub mod presto {
+        pub mod prestolexer;
+        pub mod prestolistener;
+        pub mod prestoparser;
+    }
+}
+
+pub mod presto {
+    pub mod binding_context;
+    pub mod function;
+    pub mod node;
+    pub mod parser;
+    pub mod planner;
+}
+
 pub use datafusion_common::{ResolvedTableReference, TableReference};
 pub use sqlparser;
