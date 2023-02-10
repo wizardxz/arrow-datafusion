@@ -93,15 +93,16 @@ pub fn bind(sql: &str, bc: &BindingContextStack) -> BindResult {
 }
 
 fn plan_from_tables<'input>(
-    relations: Vec<Rc<RelationContextAll<'input>>>,
+    relations: &[Rc<RelationContextAll<'input>>],
     bc: &BindingContextStack,
 ) -> Result<LogicalPlan> {
     match relations.len() {
         0 => LogicalPlanBuilder::empty(true).build(),
         1 => relations[0].bind(bc),
         _ => {
-            let left = plan_from_tables(relations[0..relations.len() - 1].to_vec(), bc)?;
-            let right = plan_from_tables(relations[relations.len() - 1..].to_vec(), bc)?;
+            let (right_ctx, left_ctx) = relations.split_last().unwrap();
+            let left = plan_from_tables(left_ctx, bc)?;
+            let right = plan_from_tables(&[right_ctx.clone()], bc)?;
             LogicalPlanBuilder::from(left).cross_join(right)?.build()
         }
     }
@@ -873,7 +874,7 @@ impl Binder<LogicalPlan> for QuerySpecificationContextAll<'_> {
             todo!()
         }
         // bind from clause
-        let parent = plan_from_tables(self.relation_all(), bc)?;
+        let parent = plan_from_tables(&self.relation_all(), bc)?;
 
         // bind where clause
         let parent = match self.where_.as_ref() {
