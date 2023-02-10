@@ -45,7 +45,7 @@ use crate::{
 };
 use datafusion_common::{
     parse_interval, parsers::CompressionTypeVariant, BinderError, Column,
-    DataFusionError, OwnedTableReference, Parser2Error, Result, ScalarValue,
+    DataFusionError, OwnedTableReference, PrestoParserError, Result, ScalarValue,
     TableReference, ToDFSchema,
 };
 use datafusion_expr::Expr::Alias;
@@ -72,7 +72,7 @@ trait Binder<S> {
 pub enum BindResult {
     Success(LogicalPlan),
     ANTLRError(ANTLRError),
-    Parser2Error(Parser2Error),
+    PrestoParserError(PrestoParserError),
     BindError(DataFusionError),
 }
 
@@ -81,7 +81,7 @@ pub fn bind(sql: &str, bc: &BindingContextStack) -> BindResult {
     let (root, error) = parse(sql, &tf);
     let parser_error_ref = error.borrow();
     match parser_error_ref.as_ref() {
-        Some(e) => BindResult::Parser2Error(e.clone()),
+        Some(e) => BindResult::PrestoParserError(e.clone()),
         None => match root {
             Ok(root) => match root.bind(bc) {
                 Ok(plan) => BindResult::Success(plan),
@@ -266,20 +266,16 @@ fn bind_with_query(
     if let Some((first, rest)) = named_query_ctxes.split_first() {
         let plan = first.bind(bc)?;
         let alias = match &plan {
-            LogicalPlan::SubqueryAlias(plan) => Ok(plan.alias.clone()),
+            LogicalPlan::SubqueryAlias(plan) => plan.alias.clone(),
             LogicalPlan::Projection(plan) => {
                 if let LogicalPlan::SubqueryAlias(plan) = &*plan.input {
-                    Ok(plan.alias.clone())
+                    plan.alias.clone()
                 } else {
-                    Err(DataFusionError::NotImplemented(format!(
-                        "not implement namedQuery projection"
-                    )))
+                    todo!()
                 }
             }
-            _ => Err(DataFusionError::NotImplemented(format!(
-                "not implement namedQuery"
-            ))),
-        }?;
+            _ => todo!(),
+        };
         if bc
             .resolve_table(
                 &CodeLocation {
@@ -337,7 +333,7 @@ fn bind_with_query(
 // Begin generated boiler plate
 impl Binder<LogicalPlan> for SingleStatementContextAll<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<LogicalPlan> {
-        self.statement().unwrap().as_ref().bind(bc)
+        self.statement().unwrap().bind(bc)
     }
 }
 
@@ -1694,7 +1690,7 @@ impl Binder<Expr> for ArithmeticBinaryContext<'_> {
             ASTERISK => Ok(Operator::Multiply),
             SLASH => Ok(Operator::Divide),
             PERCENT => Ok(Operator::Modulo),
-            _ => Err(DataFusionError::Parser(Parser2Error {
+            _ => Err(DataFusionError::Parser(PrestoParserError {
                 row: operator_ctx.line,
                 col: operator_ctx.column,
                 message: format!("Invalid binary operator {}", operator_ctx.get_text()),
@@ -1772,7 +1768,7 @@ impl Binder<Expr> for TypeConstructorContext<'_> {
             ))),
             "interval" => match parse_interval("", &value) {
                 Ok(interval) => Ok(lit(interval)),
-                Err(e) => Err(DataFusionError::Parser(Parser2Error {
+                Err(e) => Err(DataFusionError::Parser(PrestoParserError {
                     row: self.start().line,
                     col: self.start().column,
                     message: e.to_string(),
@@ -1798,7 +1794,7 @@ impl Binder<Expr> for BooleanLiteralContext<'_> {
         } else if self.booleanValue().unwrap().FALSE().is_some() {
             Ok(lit(false))
         } else {
-            Err(DataFusionError::Parser(Parser2Error {
+            Err(DataFusionError::Parser(PrestoParserError {
                 row: self.start().line,
                 col: self.start().column,
                 message: format!("invalid boolean value"),
@@ -2230,7 +2226,7 @@ impl Binder<WindowFrame> for FrameExtentContextAll<'_> {
             RANGE => Ok(WindowFrameUnits::Range),
             ROWS => Ok(WindowFrameUnits::Rows),
             GROUPS => Ok(WindowFrameUnits::Groups),
-            _ => Err(DataFusionError::Parser(Parser2Error {
+            _ => Err(DataFusionError::Parser(PrestoParserError {
                 row: self.start().line,
                 col: self.start().column,
                 message: format!("unknown window frame unit {}", self.get_text()),

@@ -183,7 +183,7 @@ mod tests {
         match bind(sql, bc) {
             BindResult::Success(plan) => Ok(plan),
             BindResult::ANTLRError(e) => Err(DataFusionError::Internal(e.to_string())),
-            BindResult::Parser2Error(e) => Err(DataFusionError::Parser(e)),
+            BindResult::PrestoParserError(e) => Err(DataFusionError::Parser(e)),
             BindResult::BindError(e) => Err(e),
         }
     }
@@ -1340,7 +1340,7 @@ mod tests {
         let sql = "SELECT INTERVAL '100000000000000000 day'";
         let err = logical_plan(sql, None).expect_err("query should have failed");
         assert_eq!(
-            "Parser(Parser2Error { row: 1, col: 7, message: \"This feature is not implemented: \
+            "Parser(PrestoParserError { row: 1, col: 7, message: \"This feature is not implemented: \
             Interval field value out of range: \\\"100000000000000000 day\\\"\" })",
             format!("{err:?}")
         );

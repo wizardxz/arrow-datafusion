@@ -70,7 +70,7 @@ pub enum DataFusionError {
     // This error is raised when one of those invariants is not verified during execution.
     Internal(String),
     /// This error happens whenever a sql syntax is not valid.
-    Parser(Parser2Error),
+    Parser(PrestoParserError),
     /// This error happens whenever a plan is not valid. Examples include
     /// impossible casts.
     Plan(String),
@@ -123,13 +123,13 @@ macro_rules! plan_err {
 }
 
 #[derive(Debug, Clone)]
-pub struct Parser2Error {
+pub struct PrestoParserError {
     pub row: isize,
     pub col: isize,
     pub message: String,
 }
 
-impl Display for Parser2Error {
+impl Display for PrestoParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "line {}:{} {}", self.row, self.col, self.message)
     }

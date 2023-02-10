@@ -35,8 +35,8 @@ use arrow::compute::SortOptions;
 pub use column::Column;
 pub use dfschema::{DFField, DFSchema, DFSchemaRef, ExprSchema, ToDFSchema};
 pub use error::{
-    field_not_found, BinderError, DataFusionError, Parser2Error, Result, SchemaError,
-    SharedResult,
+    field_not_found, BinderError, DataFusionError, PrestoParserError, Result,
+    SchemaError, SharedResult,
 };
 pub use parsers::parse_interval;
 pub use scalar::{ScalarType, ScalarValue};

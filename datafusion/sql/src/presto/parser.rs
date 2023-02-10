@@ -14,7 +14,7 @@ use antlr_rust::errors::ANTLRError;
 use antlr_rust::int_stream::{self, IntStream};
 use antlr_rust::recognizer::Recognizer;
 use antlr_rust::token_factory::{ArenaCommonFactory, TokenFactory};
-use datafusion_common::Parser2Error;
+use datafusion_common::PrestoParserError;
 
 #[derive(Debug)]
 pub struct CaseInsensitiveInputStream<Data: Deref> {
@@ -139,7 +139,7 @@ where
 }
 
 struct MyErrorListener {
-    error: Rc<RefCell<Option<Parser2Error>>>,
+    error: Rc<RefCell<Option<PrestoParserError>>>,
 }
 
 impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for MyErrorListener {
@@ -152,7 +152,7 @@ impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for MyErrorListener {
         msg: &str,
         _e: Option<&ANTLRError>,
     ) {
-        let _ = self.error.clone().borrow_mut().insert(Parser2Error {
+        let _ = self.error.clone().borrow_mut().insert(PrestoParserError {
             row: line,
             col: column,
             message: msg.to_string(),
@@ -165,14 +165,14 @@ pub fn parse<'input>(
     tf: &'input ArenaCommonFactory<'input>,
 ) -> (
     result::Result<Rc<SingleStatementContextAll<'input>>, ANTLRError>,
-    Rc<RefCell<Option<Parser2Error>>>,
+    Rc<RefCell<Option<PrestoParserError>>>,
 ) {
     let mut _lexer: PrestoLexer<'input, CaseInsensitiveInputStream<&'input str>> =
         PrestoLexer::new_with_token_factory(CaseInsensitiveInputStream::new(&sql), &tf);
     let token_source = CommonTokenStream::new(_lexer);
     let mut parser = PrestoParser::new(token_source);
     parser.remove_error_listeners();
-    let error: Rc<RefCell<Option<Parser2Error>>> = Rc::new(RefCell::new(None));
+    let error: Rc<RefCell<Option<PrestoParserError>>> = Rc::new(RefCell::new(None));
     parser.add_error_listener(Box::new(MyErrorListener {
         error: error.clone(),
     }));
