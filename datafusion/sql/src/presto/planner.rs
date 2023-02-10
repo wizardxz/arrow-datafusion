@@ -11,13 +11,13 @@ use datafusion_expr::{
     col,
     expr::{self, Sort},
     lit,
-    type_coercion::binary::comparison_coercion,
+    type_coercion::binary::{comparison_coercion},
     utils::{
         expand_qualified_wildcard, expand_wildcard, expr_as_column_expr,
         find_aggregate_exprs, find_columns_referenced_by_expr, find_window_exprs,
     },
     AggregateFunction, Between, BinaryExpr, BuiltInWindowFunction, BuiltinScalarFunction,
-    Case, Cast, CreateExternalTable, Expr, ExprSchemable, Filter, JoinType, LogicalPlan,
+    Case, Cast, CreateExternalTable, Expr, Filter, JoinType, LogicalPlan,
     LogicalPlanBuilder, Operator, Subquery, SubqueryAlias, TryCast, WindowFrame,
     WindowFrameBound, WindowFrameUnits, WindowFunction,
 };
@@ -1837,19 +1837,15 @@ impl Binder<Expr> for FunctionCallContext<'_> {
                 .map(|ctx| ctx.bind(bc))
                 .collect::<result::Result<Vec<_>, _>>()?
         };
-        let argument_types: Vec<_> = arguments
+        let argument_types = arguments
             .iter()
             .map(|arg| {
-                arg.get_type(
-                    &bc.get_schema(&CodeLocation::new(
-                        self.start().line,
-                        self.start().column,
-                    ))
-                    .unwrap(),
+                bc.get_expr_type(
+                    &CodeLocation::new(self.start().line, self.start().column),
+                    arg,
                 )
-                .unwrap()
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         let window_specification = if let Some(ctx) = self.over() {
             Some(ctx.bind(bc)?)

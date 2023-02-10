@@ -1,11 +1,12 @@
 use arrow_schema::DataType;
-use datafusion_expr::{Expr, Join, JoinConstraint, LogicalPlan};
+use datafusion_expr::{Expr, ExprSchemable, Join, JoinConstraint, LogicalPlan};
 
 use super::function::FunctionOverload;
-use datafusion_common::{
-    BinderError, Column, DFSchemaRef, DataFusionError, Result, TableReference,
+use datafusion_common::{BinderError, Column, DataFusionError, Result, TableReference};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
 };
-use std::{collections::HashMap, rc::Rc};
 
 pub trait BindingContext {
     fn resolve_table(&self, _: &TableReference) -> Result<LogicalPlan> {
@@ -20,7 +21,7 @@ pub trait BindingContext {
         Err(DataFusionError::BindingContextInternal(None))
     }
 
-    fn get_schema(&self) -> Result<DFSchemaRef> {
+    fn get_expr_type(&self, _: &Expr) -> Result<DataType> {
         Err(DataFusionError::BindingContextInternal(None))
     }
 
@@ -183,8 +184,8 @@ impl<'a> BindingContext for ColumnBindingContext<'a> {
         }
     }
 
-    fn get_schema(&self) -> Result<DFSchemaRef> {
-        Ok(self.parent.schema().clone())
+    fn get_expr_type(&self, expr: &Expr) -> Result<DataType> {
+        expr.get_type(self.parent.schema())
     }
 }
 
@@ -232,6 +233,23 @@ impl<'a> BindingContext for MultipleParentColumnBindingContext<'a> {
             Err(DataFusionError::Internal(format!(
                 "MultipleParentColumnBindingContext should have logical plans."
             )))
+        }
+    }
+
+    fn get_expr_type(&self, expr: &Expr) -> Result<DataType> {
+        let results = self
+            .parents
+            .iter()
+            .filter_map(|parent| ColumnBindingContext { parent }.get_expr_type(expr).ok())
+            .collect::<HashSet<_>>();
+        match results.len() {
+            0 => Err(DataFusionError::BindingContextInternal(Some(format!(
+                "No expr {expr:?} found"
+            )))),
+            1 => Ok(results.into_iter().next().unwrap()),
+            _ => Err(DataFusionError::BindingContextInternal(Some(format!(
+                "Ambiguous expr type {expr:?} found"
+            )))),
         }
     }
 }
@@ -452,11 +470,15 @@ impl<'a> BindingContextStack<'a> {
         }
     }
 
-    pub fn get_schema(&self, location: &CodeLocation) -> Result<DFSchemaRef> {
-        match self.resolve(|bc| bc.get_schema()) {
+    pub fn get_expr_type(
+        &self,
+        location: &CodeLocation,
+        expr: &Expr,
+    ) -> Result<DataType> {
+        match self.resolve(|bc| bc.get_expr_type(expr)) {
             Ok(result) => Ok(result),
             _ => Err(DataFusionError::Internal(format!(
-                "({},{}) unexpected error in get_schema",
+                "({},{}) unexpected error in get_expr_type",
                 location.row, location.col
             ))),
         }
