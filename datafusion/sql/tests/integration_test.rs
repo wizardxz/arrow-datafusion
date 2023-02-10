@@ -3986,6 +3986,16 @@ fn test_inner_join_with_cast_key() {
     quick_test(sql, expected);
 }
 
+#[test]
+fn test_invalid_binary_op() {
+    let sql = "SELECT 1 + 'a'";
+    let err = logical_plan(sql).expect_err("query should have failed");
+    assert_eq!(
+            "Plan(\"'Int64 + Utf8' can't be evaluated because there isn't a common type to coerce the types to\")",
+            format!("{err:?}")
+        );
+}
+
 fn assert_field_not_found(err: DataFusionError, name: &str) {
     match err {
         DataFusionError::SchemaError { .. } => {

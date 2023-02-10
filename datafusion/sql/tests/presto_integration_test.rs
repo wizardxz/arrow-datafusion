@@ -3772,4 +3772,14 @@ mod tests {
                 \n    TableScan: orders";
         quick_test(sql, expected);
     }
+
+    #[test]
+    fn test_invalid_binary_op() {
+        let sql = "SELECT 1 + 'a'";
+        let err = logical_plan(sql, None).expect_err("query should have failed");
+        assert_eq!(
+                "Bind(BinderError { row: 1, col: 9, message: \"Error during planning: 'Int64 + Utf8' can't be evaluated because there isn't a common type to coerce the types to\" })",
+                format!("{err:?}")
+            );
+    }
 }
