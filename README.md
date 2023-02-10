@@ -70,13 +70,6 @@ features, and avoid reimplementing general (but still necessary)
 features such as an expression representation, standard optimizations,
 execution plans, file format support, etc.
 
-## Getting Started (SDF)
-
-Run the following command in your project directory to kick off local development:
-
-```bash
-    ./setup_local.sh
-```
 ## Why DataFusion?
 
 - _High Performance_: Leveraging Rust and Arrow's memory model, DataFusion is very fast.
