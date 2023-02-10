@@ -11,7 +11,7 @@ use datafusion_expr::{
     col,
     expr::{self, Sort},
     lit,
-    type_coercion::binary::{comparison_coercion},
+    type_coercion::binary::{coerce_types, comparison_coercion},
     utils::{
         expand_qualified_wildcard, expand_wildcard, expr_as_column_expr,
         find_aggregate_exprs, find_columns_referenced_by_expr, find_window_exprs,
@@ -1694,7 +1694,21 @@ impl Binder<Expr> for ArithmeticBinaryContext<'_> {
                 message: format!("Invalid binary operator {}", operator_ctx.get_text()),
             })),
         }?;
-
+        let location = CodeLocation {
+            row: operator_ctx.line,
+            col: operator_ctx.column,
+        };
+        if let Err(e) = coerce_types(
+            &bc.get_expr_type(&location, &left)?,
+            &operator,
+            &bc.get_expr_type(&location, &right)?,
+        ) {
+            return Err(DataFusionError::Bind(BinderError {
+                row: operator_ctx.line,
+                col: operator_ctx.column,
+                message: e.to_string(),
+            }));
+        }
         Ok(Expr::BinaryExpr(BinaryExpr::new(
             Box::new(left),
             operator,
