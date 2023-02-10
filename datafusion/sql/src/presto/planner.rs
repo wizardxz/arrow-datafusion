@@ -78,12 +78,12 @@ pub enum BindResult {
 
 pub fn bind(sql: &str, bc: &BindingContextStack) -> BindResult {
     let tf = ArenaCommonFactory::default();
-    let (root, error) = parse(sql, &tf);
+    let (ctx, error) = parse(sql, &tf);
     let parser_error_ref = error.borrow();
     match parser_error_ref.as_ref() {
         Some(e) => BindResult::PrestoParserError(e.clone()),
-        None => match root {
-            Ok(root) => match root.bind(bc) {
+        None => match ctx {
+            Ok(ctx) => match ctx.bind(bc) {
                 Ok(plan) => BindResult::Success(plan),
                 Err(e) => BindResult::BindError(e),
             },
@@ -874,10 +874,10 @@ impl Binder<LogicalPlan> for QuerySpecificationContextAll<'_> {
 
         // bind where clause
         let parent = match self.where_.as_ref() {
-            Some(w) => {
+            Some(ctx) => {
                 let predicate = bc
                     .with_push(&ColumnBindingContext { parent: &parent }, |bc| {
-                        w.bind(bc)
+                        ctx.bind(bc)
                     })?;
                 LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(parent))?)
             }
@@ -1136,7 +1136,7 @@ impl Binder<GroupingElement> for RollupContext<'_> {
         let exprs = self
             .expression_all()
             .iter()
-            .map(|expr| expr.bind(bc))
+            .map(|ctx| ctx.bind(bc))
             .collect::<Result<_>>()?;
         Ok(GroupingElement::Rollup(RollupGroupingElement { exprs }))
     }
@@ -1146,7 +1146,7 @@ impl Binder<GroupingElement> for CubeContext<'_> {
         let exprs = self
             .expression_all()
             .iter()
-            .map(|expr| expr.bind(bc))
+            .map(|ctx| ctx.bind(bc))
             .collect::<Result<_>>()?;
         Ok(GroupingElement::Cube(CubeGroupingElement { exprs }))
     }
@@ -1156,7 +1156,7 @@ impl Binder<GroupingElement> for MultipleGroupingSetsContext<'_> {
         let grouping_sets = self
             .groupingSet_all()
             .iter()
-            .map(|g| g.bind(bc))
+            .map(|ctx| ctx.bind(bc))
             .collect::<Result<Vec<GroupingSet>>>()?;
         Ok(GroupingElement::Multiple(MultipleGroupingElement {
             grouping_sets,
@@ -1335,12 +1335,12 @@ impl Binder<LogicalPlan> for JoinRelationContext<'_> {
                     bc.with_push(&ColumnBindingContext { parent: parent }, |bc| {
                         identifiers
                             .iter()
-                            .map(|identifier_ctx| {
-                                let name = identifier_ctx.bind(bc)?;
+                            .map(|ctx| {
+                                let name = ctx.bind(bc)?;
                                 match bc.resolve_column(
                                     &CodeLocation::new(
-                                        identifier_ctx.start().line,
-                                        identifier_ctx.start().column,
+                                        ctx.start().line,
+                                        ctx.start().column,
                                     ),
                                     &name,
                                 ) {
@@ -1357,8 +1357,8 @@ impl Binder<LogicalPlan> for JoinRelationContext<'_> {
                 let join_type = self.joinType().unwrap().bind(bc)?;
                 let keys = identifiers
                     .iter()
-                    .map(|identifier_ctx| {
-                        let name = identifier_ctx.bind(bc)?;
+                    .map(|ctx| {
+                        let name = ctx.bind(bc)?;
                         Ok(Column {
                             relation: None,
                             name: name,
@@ -1399,7 +1399,7 @@ impl Binder<LogicalPlan> for JoinRelationContext<'_> {
 }
 impl Binder<LogicalPlan> for RelationDefaultContext<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<LogicalPlan> {
-        self.sampledRelation().unwrap().as_ref().bind(bc)
+        self.sampledRelation().unwrap().bind(bc)
     }
 }
 
@@ -1423,7 +1423,7 @@ impl Binder<LogicalPlan> for SampledRelationContextAll<'_> {
         if self.sampleType().is_some() {
             todo!()
         }
-        self.patternRecognition().unwrap().as_ref().bind(bc)
+        self.patternRecognition().unwrap().bind(bc)
     }
 }
 
@@ -1432,13 +1432,13 @@ impl Binder<LogicalPlan> for PatternRecognitionContextAll<'_> {
         if self.MATCH_RECOGNIZE().is_some() {
             todo!()
         }
-        self.aliasedRelation().unwrap().as_ref().bind(bc)
+        self.aliasedRelation().unwrap().bind(bc)
     }
 }
 
 impl Binder<LogicalPlan> for AliasedRelationContextAll<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<LogicalPlan> {
-        let relation = self.relationPrimary().unwrap().as_ref().bind(bc)?;
+        let relation = self.relationPrimary().unwrap().bind(bc)?;
         match self.identifier() {
             Some(identifier) => {
                 let alias = identifier.bind(bc)?;
@@ -1447,12 +1447,12 @@ impl Binder<LogicalPlan> for AliasedRelationContextAll<'_> {
                     alias.clone(),
                 )?);
                 match self.columnAliases() {
-                    Some(column_aliases_ctx) => {
-                        let column_aliases = column_aliases_ctx.bind(bc)?;
+                    Some(ctx) => {
+                        let column_aliases = ctx.bind(bc)?;
                         if column_aliases.len() != relation.schema().fields().len() {
                             return Err(DataFusionError::Bind(BinderError {
-                                row: column_aliases_ctx.start().line,
-                                col: column_aliases_ctx.start().column,
+                                row: ctx.start().line,
+                                col: ctx.start().column,
                                 message: format!("Source table contains {} columns but only {} names given as column alias", relation.schema().fields().len(), column_aliases.len()),
                             }));
                         }
@@ -1485,7 +1485,7 @@ impl Binder<Vec<String>> for ColumnAliasesContextAll<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<Vec<String>> {
         self.identifier_all()
             .iter()
-            .map(|identifier| identifier.bind(bc))
+            .map(|ctx| ctx.bind(bc))
             .collect()
     }
 }
@@ -1505,7 +1505,7 @@ impl Binder<LogicalPlan> for TableNameContext<'_> {
         }
 
         let table_ref_result: OwnedTableReference =
-            self.qualifiedName().unwrap().as_ref().bind(bc)?;
+            self.qualifiedName().unwrap().bind(bc)?;
         let table_ref = table_ref_result.as_table_reference();
         bc.resolve_table(
             &CodeLocation::new(self.start().line, self.start().column),
@@ -1529,7 +1529,7 @@ impl Binder<LogicalPlan> for ParenthesizedRelationContext<'_> {
 }
 impl Binder<Expr> for ExpressionContextAll<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<Expr> {
-        self.booleanExpression().unwrap().as_ref().bind(bc)
+        self.booleanExpression().unwrap().bind(bc)
     }
 }
 
@@ -1539,9 +1539,7 @@ impl Binder<Expr> for PredicatedContext<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<Expr> {
         let value = self.valueExpression().unwrap().bind(bc)?;
         match self.predicate() {
-            Some(predicate) => {
-                bc.with_push(&ValueContext { value: &value }, |bc| predicate.bind(bc))
-            }
+            Some(ctx) => bc.with_push(&ValueContext { value: &value }, |bc| ctx.bind(bc)),
             None => Ok(value),
         }
     }
@@ -1836,7 +1834,7 @@ impl Binder<Expr> for FunctionCallContext<'_> {
         } else {
             self.expression_all()
                 .iter()
-                .map(|expr| expr.bind(bc))
+                .map(|ctx| ctx.bind(bc))
                 .collect::<result::Result<Vec<_>, _>>()?
         };
         let argument_types: Vec<_> = arguments
@@ -1853,8 +1851,8 @@ impl Binder<Expr> for FunctionCallContext<'_> {
             })
             .collect();
 
-        let window_specification = if let Some(o) = self.over() {
-            Some(o.bind(bc)?)
+        let window_specification = if let Some(ctx) = self.over() {
+            Some(ctx.bind(bc)?)
         } else {
             None
         };
@@ -1868,8 +1866,8 @@ impl Binder<Expr> for FunctionCallContext<'_> {
             &argument_types,
         )?;
 
-        let filter = if let Some(filter) = self.filter() {
-            Some(Box::new(filter.bind(bc)?))
+        let filter = if let Some(ctx) = self.filter() {
+            Some(Box::new(ctx.bind(bc)?))
         } else {
             None
         };
@@ -2233,8 +2231,8 @@ impl Binder<WindowFrame> for FrameExtentContextAll<'_> {
             })),
         }?;
         let start_bound = self.start.as_ref().unwrap().bind(bc)?;
-        let end_bound = if let Some(e) = self.end.as_ref() {
-            e.bind(bc)?
+        let end_bound = if let Some(ctx) = self.end.as_ref() {
+            ctx.bind(bc)?
         } else {
             WindowFrameBound::CurrentRow
         };
@@ -2305,7 +2303,10 @@ impl Binder<OwnedTableReference> for QualifiedNameContextAll<'_> {
 
 impl Binder<Vec<String>> for QualifiedNameContextAll<'_> {
     fn bind(&self, bc: &BindingContextStack) -> Result<Vec<String>> {
-        self.identifier_all().iter().map(|i| i.bind(bc)).collect()
+        self.identifier_all()
+            .iter()
+            .map(|ctx| ctx.bind(bc))
+            .collect()
     }
 }
 impl Binder<Expr> for QualifiedNameContextAll<'_> {
