@@ -34,7 +34,7 @@ use super::{
     },
 };
 use crate::{
-    antlr::presto::{
+    antlr::generated::presto::{
         prestolexer::{DESC, EXCEPT, FIRST, INTERSECT, PLUS, PRECEDING, RANGE},
         prestoparser::*,
     },

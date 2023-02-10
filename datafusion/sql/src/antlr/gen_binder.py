@@ -3,8 +3,8 @@ from enum import Enum, auto
 import re
 from typing import Dict, Generator, Iterable, List
 from antlr4 import CommonTokenStream, InputStream
-from antlr.ANTLRv4Lexer import ANTLRv4Lexer as Lexer
-from antlr.ANTLRv4Parser import ANTLRv4Parser as Parser
+from generated.antlr.ANTLRv4Lexer import ANTLRv4Lexer as Lexer
+from generated.antlr.ANTLRv4Parser import ANTLRv4Parser as Parser
 
 BEGIN_COMMENT = "// Begin generated boiler plate"
 END_COMMENT = "// End generated boiler plate"

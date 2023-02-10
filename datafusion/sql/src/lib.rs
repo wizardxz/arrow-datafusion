@@ -30,10 +30,12 @@ pub mod utils;
 mod values;
 
 mod antlr {
-    pub mod presto {
-        pub mod prestolexer;
-        pub mod prestolistener;
-        pub mod prestoparser;
+    pub mod generated {
+        pub mod presto {
+            pub mod prestolexer;
+            pub mod prestolistener;
+            pub mod prestoparser;
+        }
     }
 }
 

@@ -3,8 +3,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::result;
 
-use crate::antlr::presto::prestolexer::PrestoLexer;
-use crate::antlr::presto::prestoparser::{PrestoParser, SingleStatementContextAll};
+use crate::antlr::generated::presto::prestolexer::PrestoLexer;
+use crate::antlr::generated::presto::prestoparser::{PrestoParser, SingleStatementContextAll};
 use antlr_rust::char_stream::{CharStream, InputData};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
